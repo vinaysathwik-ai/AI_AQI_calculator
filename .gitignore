@@ -1,0 +1,28 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Models
+models/*.pkl
+models/*.joblib
+
+# Datasets
+datasets/raw/
+datasets/processed/
+
+# VS Code
+.vscode/
+
+# Node
+frontend/node_modules/
+
+# Logs
+*.log
+
+# Environment
+.env
+
+# OS
+.DS_Store
+Thumbs.db

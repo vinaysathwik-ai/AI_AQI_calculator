@@ -1,28 +1,26 @@
 # Python
+venv/
 .venv/
 __pycache__/
 *.pyc
 
-# Models
-models/*.pkl
-models/*.joblib
-
 # Datasets
-datasets/raw/
-datasets/processed/
-
-# VS Code
-.vscode/
+*.csv
+!datasets/**/*.csv
 
 # Node
 frontend/node_modules/
+frontend/dist/
 
-# Logs
+# Java / Spring Boot
+backend/backend/target/
+
+# Environment & Logs
+.env
 *.log
 
-# Environment
-.env
-
-# OS
+# OS & IDE
+.vscode/
+.idea/
 .DS_Store
 Thumbs.db

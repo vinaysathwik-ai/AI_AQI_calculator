@@ -7,15 +7,20 @@ from sklearn.metrics import mean_absolute_error, r2_score
 from xgboost import XGBRegressor
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+dataset_path = PROJECT_ROOT / "datasets/raw/historical/city_day.csv"
 
-df = pd.read_csv(
-    PROJECT_ROOT / "datasets/raw/historical/city_day.csv"
-)
+if not dataset_path.exists():
+    raise FileNotFoundError(f"Dataset not found at {dataset_path}")
+
+df = pd.read_csv(dataset_path)
+
+if "PM2.5" in df.columns:
+    df = df.rename(columns={"PM2.5": "PM25"})
 
 df = df.dropna(subset=["AQI"])
 
 features = [
-    "PM2.5",
+    "PM25",
     "PM10",
     "NO",
     "NO2",
@@ -29,9 +34,14 @@ features = [
     "Xylene"
 ]
 
-X = df[features]
+X = df[features].copy()
 
-imputer = SimpleImputer(strategy="median")
+# Fill features that have no observed values with 0 so imputer fits all 12 features
+for col in features:
+    if col not in X.columns or X[col].dropna().empty:
+        X[col] = 0.0
+
+imputer = SimpleImputer(strategy="median", fill_value=0.0)
 X = imputer.fit_transform(X)
 
 y = df["AQI"]

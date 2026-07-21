@@ -1,8 +1,52 @@
+import { useEffect, useState } from "react";
 import Card from "../ui/Card";
-import { Clock3, MapPin } from "lucide-react";
-import { recentPredictions } from "../../data/dashboardData";
+import { Clock3, Activity } from "lucide-react";
+import { recentPredictions as fallbackPredictions } from "../../data/dashboardData";
+import api from "../../services/api";
+
+function formatTime(createdAt) {
+  if (!createdAt) return "Recent";
+  const date = new Date(createdAt);
+  if (isNaN(date.getTime())) return "Recent";
+  const diffMinutes = Math.floor((new Date() - date) / (1000 * 60));
+  if (diffMinutes < 1) return "Just now";
+  if (diffMinutes < 60) return `${diffMinutes} min ago`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} hr ago`;
+  return date.toLocaleDateString();
+}
 
 function RecentPredictions() {
+  const [predictions, setPredictions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchRecent() {
+      try {
+        const response = await api.get("/api/predictions/recent");
+        if (response.data && response.data.length > 0) {
+          const mapped = response.data.map((item) => ({
+            id: item.id,
+            aqi: item.predictedAQI,
+            category: item.category || "Moderate",
+            time: formatTime(item.createdAt),
+            pm25: item.pm25,
+            pm10: item.pm10,
+          }));
+          setPredictions(mapped);
+        } else {
+          setPredictions(fallbackPredictions);
+        }
+      } catch (err) {
+        console.warn("Using fallback recent predictions:", err.message);
+        setPredictions(fallbackPredictions);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchRecent();
+  }, []);
+
   return (
     <Card className="h-full">
       <div className="mb-6">
@@ -14,38 +58,42 @@ function RecentPredictions() {
         </p>
       </div>
 
-      <div className="space-y-4">
-        {recentPredictions.map((prediction, index) => (
-          <div
-            key={index}
-            className="flex items-center justify-between rounded-2xl border border-slate-200 p-4 transition-all duration-300 hover:border-cyan-400 hover:shadow-md"
-          >
-            <div>
-              <div className="flex items-center gap-2">
-                <MapPin size={16} className="text-cyan-600" />
-                <span className="font-semibold">
-                  {prediction.city}
-                </span>
+      {loading ? (
+        <div className="py-8 text-center text-slate-400">Loading recent predictions...</div>
+      ) : (
+        <div className="space-y-4">
+          {predictions.map((prediction, index) => (
+            <div
+              key={prediction.id || index}
+              className="flex items-center justify-between rounded-2xl border border-slate-200 p-4 transition-all duration-300 hover:border-cyan-400 hover:shadow-md"
+            >
+              <div>
+                <div className="flex items-center gap-2">
+                  <Activity size={16} className="text-cyan-600" />
+                  <span className="font-semibold">
+                    {prediction.city || `Prediction #${prediction.id}`}
+                  </span>
+                </div>
+
+                <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
+                  <Clock3 size={14} />
+                  {prediction.time}
+                </div>
               </div>
 
-              <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
-                <Clock3 size={14} />
-                {prediction.time}
+              <div className="text-right">
+                <div className="text-3xl font-bold text-cyan-600">
+                  {prediction.aqi}
+                </div>
+
+                <div className="mt-1 rounded-full bg-cyan-100 px-3 py-1 text-xs font-medium text-cyan-700">
+                  {prediction.category}
+                </div>
               </div>
             </div>
-
-            <div className="text-right">
-              <div className="text-3xl font-bold text-cyan-600">
-                {prediction.aqi}
-              </div>
-
-              <div className="mt-1 rounded-full bg-cyan-100 px-3 py-1 text-xs font-medium text-cyan-700">
-                {prediction.category}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }

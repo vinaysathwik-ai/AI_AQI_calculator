@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: smartaqi-postgres
+    environment:
+      POSTGRES_DB: smartaqidb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ml:
+    build:
+      context: .
+      dockerfile: ml/Dockerfile
+    container_name: smartaqi-ml
+    ports:
+      - "8000:8000"
+    restart: always
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: smartaqi-backend
+    ports:
+      - "8080:8080"
+    environment:
+      FASTAPI_URL: http://ml:8000/predict
+      DB_URL: jdbc:postgresql://postgres:5432/smartaqidb
+      DB_DRIVER: org.postgresql.Driver
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgrespassword
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ml:
+        condition: service_started
+    restart: always
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: smartaqi-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: always
+
+volumes:
+  postgres_data:

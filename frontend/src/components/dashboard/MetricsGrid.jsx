@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   Wind,
   ShieldCheck,
@@ -7,24 +8,63 @@ import {
 } from "lucide-react";
 
 import MetricCard from "../ui/MetricCard";
+import api from "../../services/api";
+
+// Derive colour classes from CPCB AQI category
+function categoryColor(category) {
+  const map = {
+    Good: "text-emerald-600",
+    Satisfactory: "text-green-500",
+    Moderate: "text-yellow-500",
+    Poor: "text-orange-500",
+    "Very Poor": "text-red-500",
+    Severe: "text-purple-600",
+  };
+  return map[category] ?? "text-slate-600";
+}
 
 function MetricsGrid() {
+  // Live values from /api/predictions/recent
+  const [liveAQI, setLiveAQI] = useState(null);
+  const [liveCategory, setLiveCategory] = useState(null);
+  const [totalPredictions, setTotalPredictions] = useState(null);
+
+  useEffect(() => {
+    api
+      .get("/api/predictions/recent")
+      .then((res) => {
+        if (res.data && res.data.length > 0) {
+          const latest = res.data[0];
+          setLiveAQI(Math.round(latest.predictedAQI));
+          setLiveCategory(latest.category);
+          setTotalPredictions(res.data.length);
+        }
+      })
+      .catch(() => {
+        // Silently fall back to defaults if backend is offline
+      });
+  }, []);
+
+  const aqiValue = liveAQI !== null ? String(liveAQI) : "—";
+  const aqiCategory = liveCategory ?? "Moderate";
+  const aqiColor = categoryColor(aqiCategory);
+
   const metrics = [
     {
       title: "Current AQI",
-      value: "156",
+      value: aqiValue,
       unit: "",
-      color: "text-orange-500",
-      icon: <Wind className="text-orange-500" size={28} />,
-      trend: "+12%",
+      color: aqiColor,
+      icon: <Wind className={aqiColor} size={28} />,
+      trend: "Live",
     },
     {
       title: "Air Quality",
-      value: "Moderate",
+      value: aqiCategory,
       unit: "",
-      color: "text-yellow-500",
-      icon: <ShieldCheck className="text-yellow-500" size={28} />,
-      trend: "Stable",
+      color: aqiColor,
+      icon: <ShieldCheck className={aqiColor} size={28} />,
+      trend: "Latest",
     },
     {
       title: "Monitoring Stations",

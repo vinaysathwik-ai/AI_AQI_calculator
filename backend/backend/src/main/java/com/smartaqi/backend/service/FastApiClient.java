@@ -10,6 +10,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.List;
+import java.util.Map;
+
 @Service
 public class FastApiClient {
 
@@ -33,6 +36,18 @@ public class FastApiClient {
             return response;
         } catch (RestClientException e) {
             log.error("Error communicating with FastAPI service at {}: {}", fastApiUrl, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    public List<Map<String, Object>> getGridAqi() {
+        String gridUrl = fastApiUrl.replace("/predict", "/grid-aqi");
+        log.info("Fetching grid AQI dataset from FastAPI ML service at URL: {}", gridUrl);
+        try {
+            List<Map<String, Object>> response = restTemplate.getForObject(gridUrl, List.class);
+            return response;
+        } catch (RestClientException e) {
+            log.error("Error fetching grid AQI dataset from FastAPI at {}: {}", gridUrl, e.getMessage());
             throw e;
         }
     }

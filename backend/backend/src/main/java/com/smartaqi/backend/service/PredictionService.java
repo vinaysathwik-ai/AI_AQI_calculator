@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class PredictionService {
@@ -59,5 +60,9 @@ public class PredictionService {
 
     public List<PredictionEntity> getRecentPredictions() {
         return predictionRepository.findTop10ByOrderByCreatedAtDesc();
+    }
+
+    public List<Map<String, Object>> getGridAqi() {
+        return fastApiClient.getGridAqi();
     }
 }

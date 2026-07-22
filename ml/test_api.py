@@ -100,3 +100,19 @@ def test_predict_category_matches_aqi(client):
     assert response.status_code == 200
     data = response.json()
     assert data["category"] == _aqi_category(data["predictedAQI"])
+
+
+# ─── Grid AQI endpoint ────────────────────────────────────────────────────────
+def test_grid_aqi_endpoint(client):
+    """GET /grid-aqi returns the precomputed grid array."""
+    response = client.get("/grid-aqi")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) > 0
+    first_item = data[0]
+    assert "lat" in first_item
+    assert "lon" in first_item
+    assert "aqi" in first_item
+    assert "category" in first_item
+

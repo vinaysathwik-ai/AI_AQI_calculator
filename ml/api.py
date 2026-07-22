@@ -1,3 +1,4 @@
+import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
@@ -9,15 +10,18 @@ import numpy as np
 # Resolve models relative to this file so the API works regardless of cwd.
 _HERE = Path(__file__).parent
 _MODEL_DIR = _HERE.parent / "models"
+_GRID_JSON_PATH = _HERE / "grid_aqi.json"
+_GRID_JSON_PATH_FALLBACK = _HERE.parent / "datasets/processed/grid_aqi.json"
 
 _model = None
 _imputer = None
+_grid_cache = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load models once at startup; release at shutdown."""
-    global _model, _imputer
+    global _model, _imputer, _grid_cache
     model_path = _MODEL_DIR / "aqi_model.pkl"
     imputer_path = _MODEL_DIR / "imputer.pkl"
 
@@ -29,8 +33,17 @@ async def lifespan(app: FastAPI):
 
     _model = joblib.load(model_path)
     _imputer = joblib.load(imputer_path)
+
+    # Load grid cache if available
+    grid_file = _GRID_JSON_PATH if _GRID_JSON_PATH.exists() else _GRID_JSON_PATH_FALLBACK
+    if grid_file.exists():
+        try:
+            with open(grid_file, "r") as f:
+                _grid_cache = json.load(f)
+        except Exception:
+            _grid_cache = []
+
     yield
-    # Nothing to release, but could add cleanup here
 
 
 app = FastAPI(title="SmartAQI ML API", lifespan=lifespan)
@@ -73,6 +86,22 @@ def _aqi_category(aqi: float) -> str:
 @app.get("/")
 def home():
     return {"status": "SmartAQI API Running"}
+
+
+@app.get("/grid-aqi")
+def get_grid_aqi():
+    """Return precomputed all-India AQI grid points."""
+    global _grid_cache
+    if _grid_cache is not None:
+        return _grid_cache
+    
+    grid_file = _GRID_JSON_PATH if _GRID_JSON_PATH.exists() else _GRID_JSON_PATH_FALLBACK
+    if grid_file.exists():
+        with open(grid_file, "r") as f:
+            _grid_cache = json.load(f)
+            return _grid_cache
+    
+    raise HTTPException(status_code=404, detail="Grid AQI dataset not generated yet")
 
 
 @app.post("/predict")

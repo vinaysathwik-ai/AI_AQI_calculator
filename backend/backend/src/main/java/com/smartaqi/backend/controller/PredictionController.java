@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
@@ -26,5 +27,10 @@ public class PredictionController {
     @GetMapping("/predictions/recent")
     public List<PredictionEntity> getRecentPredictions() {
         return predictionService.getRecentPredictions();
+    }
+
+    @GetMapping("/grid-aqi")
+    public List<Map<String, Object>> getGridAqi() {
+        return predictionService.getGridAqi();
     }
 }

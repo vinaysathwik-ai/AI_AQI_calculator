@@ -4,9 +4,13 @@ venv/
 __pycache__/
 *.pyc
 
-# Datasets
+# Datasets & GeoTIFFs
 *.csv
+*.tif
+*.tiff
 !datasets/**/*.csv
+!datasets/**/*.json
+
 
 # Node
 frontend/node_modules/

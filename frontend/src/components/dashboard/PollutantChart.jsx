@@ -6,6 +6,7 @@ import {
   Legend,
 } from "chart.js";
 import { Doughnut } from "react-chartjs-2";
+import { usePrediction } from "../../context/PredictionContext";
 
 ChartJS.register(
   ArcElement,
@@ -14,18 +15,35 @@ ChartJS.register(
 );
 
 function PollutantChart() {
+  const { activeLocation, prediction } = usePrediction();
+
+  const city = prediction?.city || activeLocation?.city || "Delhi";
+  const pm25 = prediction?.pm25 || activeLocation?.pm25 || 195.0;
+  const pm10 = prediction?.pm10 || activeLocation?.pm10 || 310.0;
+  const no2 = prediction?.no2 || activeLocation?.no2 || 85.0;
+  const so2 = prediction?.so2 || activeLocation?.so2 || 24.0;
+  const co = (prediction?.co || activeLocation?.co || 3.2) * 10; // Scale for chart
+  const o3 = prediction?.o3 || activeLocation?.o3 || 45.0;
+
   const data = {
     labels: [
       "PM2.5",
       "PM10",
       "NO₂",
       "SO₂",
-      "CO",
+      "CO (scaled)",
       "O₃",
     ],
     datasets: [
       {
-        data: [38, 24, 14, 8, 9, 7],
+        data: [
+          Math.round(pm25),
+          Math.round(pm10),
+          Math.round(no2),
+          Math.round(so2),
+          Math.round(co),
+          Math.round(o3),
+        ],
         backgroundColor: [
           "#06b6d4",
           "#3b82f6",
@@ -47,8 +65,16 @@ function PollutantChart() {
       legend: {
         position: "bottom",
         labels: {
-          boxWidth: 14,
-          padding: 18,
+          boxWidth: 12,
+          padding: 14,
+          font: {
+            size: 11,
+          },
+        },
+      },
+      tooltip: {
+        callbacks: {
+          label: (context) => ` ${context.label}: ${context.raw} µg/m³`,
         },
       },
     },
@@ -56,11 +82,18 @@ function PollutantChart() {
 
   return (
     <Card className="h-[420px]">
-      <h2 className="mb-6 text-xl font-semibold">
-        Pollutant Distribution
-      </h2>
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
+            Pollutant Distribution
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Relative concentration breakdown for <strong>{city}</strong>
+          </p>
+        </div>
+      </div>
 
-      <div className="h-[320px]">
+      <div className="h-[310px]">
         <Doughnut data={data} options={options} />
       </div>
     </Card>

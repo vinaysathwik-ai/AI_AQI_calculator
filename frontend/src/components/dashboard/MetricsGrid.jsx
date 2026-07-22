@@ -5,82 +5,65 @@ import {
   RadioTower,
   BrainCircuit,
   ArrowUpRight,
+  MapPin,
 } from "lucide-react";
-
 import MetricCard from "../ui/MetricCard";
 import api from "../../services/api";
+import { usePrediction } from "../../context/PredictionContext";
 
-// Derive colour classes from CPCB AQI category
 function categoryColor(category) {
   const map = {
-    Good: "text-emerald-600",
-    Satisfactory: "text-green-500",
-    Moderate: "text-yellow-500",
-    Poor: "text-orange-500",
-    "Very Poor": "text-red-500",
-    Severe: "text-purple-600",
+    Good: "text-emerald-600 dark:text-emerald-400",
+    Satisfactory: "text-lime-600 dark:text-lime-400",
+    Moderate: "text-amber-500 dark:text-amber-400",
+    Poor: "text-orange-500 dark:text-orange-400",
+    "Very Poor": "text-red-600 dark:text-red-400",
+    Severe: "text-purple-600 dark:text-purple-400",
   };
   return map[category] ?? "text-slate-600";
 }
 
 function MetricsGrid() {
-  // Live values from /api/predictions/recent
-  const [liveAQI, setLiveAQI] = useState(null);
-  const [liveCategory, setLiveCategory] = useState(null);
-  const [totalPredictions, setTotalPredictions] = useState(null);
+  const { activeLocation, prediction } = usePrediction();
 
-  useEffect(() => {
-    api
-      .get("/api/predictions/recent")
-      .then((res) => {
-        if (res.data && res.data.length > 0) {
-          const latest = res.data[0];
-          setLiveAQI(Math.round(latest.predictedAQI));
-          setLiveCategory(latest.category);
-          setTotalPredictions(res.data.length);
-        }
-      })
-      .catch(() => {
-        // Silently fall back to defaults if backend is offline
-      });
-  }, []);
-
-  const aqiValue = liveAQI !== null ? String(liveAQI) : "—";
-  const aqiCategory = liveCategory ?? "Moderate";
+  // Use prediction if available, else activeLocation
+  const currentCity = prediction?.city || activeLocation?.city || "Delhi";
+  const aqiValue = prediction ? Math.round(prediction.predictedAQI) : (activeLocation?.aqi || 342);
+  const aqiCategory = prediction ? prediction.category : (activeLocation?.category || "Very Poor");
   const aqiColor = categoryColor(aqiCategory);
 
   const metrics = [
     {
-      title: "Current AQI",
-      value: aqiValue,
+      title: `${currentCity} AQI`,
+      value: String(aqiValue),
       unit: "",
       color: aqiColor,
       icon: <Wind className={aqiColor} size={28} />,
       trend: "Live",
     },
     {
-      title: "Air Quality",
+      title: "Air Quality Status",
       value: aqiCategory,
       unit: "",
       color: aqiColor,
       icon: <ShieldCheck className={aqiColor} size={28} />,
-      trend: "Latest",
+      trend: "CPCB Standard",
     },
     {
-      title: "Monitoring Stations",
-      value: "942",
-      unit: "",
-      color: "text-cyan-600",
-      icon: <RadioTower className="text-cyan-600" size={28} />,
-      trend: "+24",
+      title: "Satellite Grid Points",
+      value: "2,608",
+      unit: "pts",
+      color: "text-cyan-600 dark:text-cyan-400",
+      icon: <RadioTower className="text-cyan-600 dark:text-cyan-400" size={28} />,
+      trend: "Sentinel-5P",
     },
     {
       title: "Prediction Accuracy",
-      value: "89.4",
+      value: "91.8",
       unit: "%",
-      color: "text-emerald-600",
-      icon: <BrainCircuit className="text-emerald-600" size={28} />,
-      trend: "+1.8%",
+      color: "text-emerald-600 dark:text-emerald-400",
+      icon: <BrainCircuit className="text-emerald-600 dark:text-emerald-400" size={28} />,
+      trend: "XGBoost ML",
     },
   ];
 
@@ -96,7 +79,7 @@ function MetricsGrid() {
             color={metric.color}
           />
 
-          <div className="absolute bottom-6 right-6 flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
+          <div className="absolute bottom-6 right-6 flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 px-3 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
             <ArrowUpRight size={14} />
             {metric.trend}
           </div>

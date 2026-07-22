@@ -1,26 +1,30 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Card from "../ui/Card";
 import {
   MapContainer,
   TileLayer,
   CircleMarker,
   Popup,
+  useMap,
 } from "react-leaflet";
+import { Search, MapPin, X, Info, Sparkles } from "lucide-react";
 import api from "../../services/api";
+import { CITIES } from "../../data/locationsData";
+import { usePrediction } from "../../context/PredictionContext";
 
 import "leaflet/dist/leaflet.css";
 import "leaflet-defaulticon-compatibility";
 import "leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css";
 
-const fallbackCities = [
-  { city: "Delhi", lat: 28.6139, lng: 77.2090, aqi: 182 },
-  { city: "Mumbai", lat: 19.0760, lng: 72.8777, aqi: 121 },
-  { city: "Bengaluru", lat: 12.9716, lng: 77.5946, aqi: 86 },
-  { city: "Hyderabad", lat: 17.3850, lng: 78.4867, aqi: 104 },
-  { city: "Chennai", lat: 13.0827, lng: 80.2707, aqi: 73 },
-  { city: "Kolkata", lat: 22.5726, lng: 88.3639, aqi: 145 },
-  { city: "Ahmedabad", lat: 23.0225, lng: 72.5714, aqi: 115 },
-];
+function MapFlyTo({ coords }) {
+  const map = useMap();
+  useEffect(() => {
+    if (coords && coords.length === 2) {
+      map.flyTo(coords, 9, { duration: 1.5 });
+    }
+  }, [coords, map]);
+  return null;
+}
 
 function getColor(aqi) {
   if (aqi <= 50) return "#10b981";      // Good - Emerald
@@ -31,18 +35,15 @@ function getColor(aqi) {
   return "#7e22ce";                      // Severe - Purple
 }
 
-function getCategory(aqi) {
-  if (aqi <= 50) return "Good";
-  if (aqi <= 100) return "Satisfactory";
-  if (aqi <= 200) return "Moderate";
-  if (aqi <= 300) return "Poor";
-  if (aqi <= 400) return "Very Poor";
-  return "Severe";
-}
-
 function IndiaMapCard() {
+  const { selectedMapCoords, selectLocation } = usePrediction();
   const [gridPoints, setGridPoints] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Map Search State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const searchRef = useRef(null);
 
   useEffect(() => {
     async function fetchGrid() {
@@ -51,7 +52,6 @@ function IndiaMapCard() {
         if (res.data && res.data.length > 0) {
           setGridPoints(res.data);
         } else {
-          // Direct fallback to ML service endpoint if Spring Boot proxy is empty
           const directRes = await fetch("http://127.0.0.1:8000/grid-aqi");
           const directData = await directRes.json();
           if (Array.isArray(directData) && directData.length > 0) {
@@ -59,7 +59,6 @@ function IndiaMapCard() {
           }
         }
       } catch (err) {
-        console.warn("Could not fetch live grid AQI from backend, trying direct FastAPI...", err);
         try {
           const directRes = await fetch("http://127.0.0.1:8000/grid-aqi");
           const directData = await directRes.json();
@@ -67,7 +66,7 @@ function IndiaMapCard() {
             setGridPoints(directData);
           }
         } catch (directErr) {
-          console.error("Failed to load satellite grid AQI:", directErr);
+          console.error("Failed to load satellite grid dataset:", directErr);
         }
       } finally {
         setLoading(false);
@@ -76,40 +75,141 @@ function IndiaMapCard() {
     fetchGrid();
   }, []);
 
+  // Filter cities for search autocomplete
+  const matchingCities = searchQuery.trim()
+    ? CITIES.filter(
+        (c) =>
+          c.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          c.state.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : [];
+
+  const handleSelectCity = (city) => {
+    selectLocation(city);
+    setSearchQuery(city.city);
+    setIsDropdownOpen(false);
+  };
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (searchRef.current && !searchRef.current.contains(e.target)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   return (
-    <Card className="h-full">
-      <div className="mb-4 flex flex-col justify-between sm:flex-row sm:items-center">
-        <div>
-          <h2 className="text-xl font-semibold">
-            All-India GeoTIFF Satellite AQI Map
-          </h2>
-          <p className="text-xs text-slate-500">
-            {gridPoints.length > 0
-              ? `Displaying ${gridPoints.length.toLocaleString()} satellite grid points sampled from Sentinel-5P`
-              : "Loading satellite spatial grid..."}
-          </p>
+    <Card className="h-full flex flex-col justify-between">
+      {/* Header & Map Controls */}
+      <div className="mb-4 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              All-India Satellite Pollution &amp; Station AQI Map
+              <Sparkles size={18} className="text-teal-600 dark:text-teal-400" />
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {gridPoints.length > 0
+                ? `Displaying ${gridPoints.length.toLocaleString()} Sentinel-5P Satellite Pollution Index (SPI) grid points across India`
+                : "Loading satellite spatial grid dataset..."}
+            </p>
+          </div>
+
+          {/* Interactive Map Search Bar */}
+          <div className="relative" ref={searchRef}>
+            <div className="relative flex items-center">
+              <Search
+                size={16}
+                className="absolute left-3.5 text-slate-400 pointer-events-none"
+              />
+              <input
+                type="text"
+                placeholder="Search city on map (e.g., Delhi, Patna)..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setIsDropdownOpen(true);
+                }}
+                onFocus={() => setIsDropdownOpen(true)}
+                className="pl-9 pr-8 py-2 w-64 lg:w-72 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-medium focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => {
+                    setSearchQuery("");
+                    setIsDropdownOpen(false);
+                  }}
+                  className="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {/* Search Dropdown Results */}
+            {isDropdownOpen && searchQuery.trim().length > 0 && (
+              <div className="absolute top-11 left-0 right-0 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 max-h-64 overflow-y-auto z-50 p-1.5">
+                {matchingCities.length > 0 ? (
+                  matchingCities.map((c) => (
+                    <button
+                      key={c.city}
+                      onClick={() => handleSelectCity(c)}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/60 flex items-center justify-between transition"
+                    >
+                      <div className="flex items-center gap-2">
+                        <MapPin size={14} className="text-teal-600 dark:text-teal-400" />
+                        <div>
+                          <div className="font-semibold text-slate-900 dark:text-white text-xs">
+                            {c.city}
+                          </div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                            {c.state}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-xs font-bold" style={{ color: getColor(c.aqi) }}>
+                          AQI {c.aqi}
+                        </span>
+                        <div className="text-[9px] text-slate-500">{c.category}</div>
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="p-3 text-center text-xs text-slate-500 dark:text-slate-400 flex items-center justify-center gap-1.5">
+                    <Info size={14} /> No matching cities found.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="mt-2 flex flex-wrap gap-2 text-xs font-medium sm:mt-0">
-          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">
-            <span className="h-2 w-2 rounded-full bg-emerald-500"></span> Good (0-50)
-          </span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-lime-100 px-2 py-0.5 text-lime-800">
-            <span className="h-2 w-2 rounded-full bg-lime-500"></span> Satisfactory (51-100)
-          </span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-yellow-800">
-            <span className="h-2 w-2 rounded-full bg-yellow-500"></span> Moderate (101-200)
-          </span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-orange-800">
-            <span className="h-2 w-2 rounded-full bg-orange-500"></span> Poor (201-300)
-          </span>
+        {/* Major City Quick-Jump Pills */}
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="text-slate-400 font-medium text-[11px]">Quick Jump:</span>
+          {CITIES.slice(0, 6).map((c) => (
+            <button
+              key={c.city}
+              onClick={() => selectLocation(c)}
+              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-teal-50 dark:hover:bg-teal-950 text-slate-700 dark:text-slate-300 hover:text-teal-700 dark:hover:text-teal-300 transition text-[11px] font-semibold flex items-center gap-1"
+            >
+              <MapPin size={10} className="text-teal-500" />
+              {c.city}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl h-[520px] relative">
+      {/* Leaflet Map Container */}
+      <div className="overflow-hidden rounded-2xl h-[500px] relative border border-slate-200 dark:border-slate-800">
         {loading && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 backdrop-blur-sm text-sm font-medium text-slate-600">
-            Loading satellite GeoTIFF spatial grid...
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm text-sm font-medium text-slate-600 dark:text-slate-300">
+            Loading satellite spatial grid dataset...
           </div>
         )}
 
@@ -120,61 +220,72 @@ function IndiaMapCard() {
           className="h-full w-full"
         >
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
-          {/* Render Satellite Grid Markers */}
+          {/* Smooth Fly-To effect when a city is searched or selected */}
+          {selectedMapCoords && <MapFlyTo coords={selectedMapCoords} />}
+
+          {/* Render Satellite Grid Markers (Satellite Pollution Index - SPI) */}
           {gridPoints.map((pt, idx) => (
             <CircleMarker
               key={`grid-${idx}`}
               center={[pt.lat, pt.lon]}
-              radius={5}
+              radius={4}
               pathOptions={{
                 color: getColor(pt.aqi),
                 fillColor: getColor(pt.aqi),
-                fillOpacity: 0.7,
+                fillOpacity: 0.65,
                 stroke: false,
               }}
             >
               <Popup>
                 <div className="space-y-1 text-xs">
                   <div className="font-semibold text-sm">
-                    Grid Coordinate ({pt.lat}°, {pt.lon}°)
+                    Satellite Grid Point ({pt.lat}°, {pt.lon}°)
                   </div>
                   <div>
-                    Predicted AQI: <strong style={{ color: getColor(pt.aqi) }}>{pt.aqi}</strong> ({pt.category || getCategory(pt.aqi)})
+                    Satellite Pollution Index (SPI): <strong>{pt.spi}</strong> ({pt.spi_level})
                   </div>
                   <div className="border-t border-slate-200 pt-1 mt-1 text-slate-600">
-                    <div>CO: {pt.co !== null ? `${pt.co} mg/m³` : "N/A"}</div>
-                    <div>NO₂: {pt.no2 !== null ? `${pt.no2} µg/m³` : "N/A"}</div>
-                    <div>O₃: {pt.o3 !== null ? `${pt.o3} µg/m³` : "N/A"}</div>
-                    <div>SO₂: {pt.so2 !== null ? `${pt.so2} µg/m³` : "N/A"}</div>
+                    <div>NO₂: {pt.no2} µg/m³</div>
+                    <div>CO: {pt.co} mg/m³</div>
+                    <div>SO₂: {pt.so2} µg/m³</div>
+                    <div>O₃: {pt.o3} µg/m³</div>
                   </div>
                 </div>
               </Popup>
             </CircleMarker>
           ))}
 
-          {/* Render Major City Markers for Orientation */}
-          {fallbackCities.map((city) => (
+          {/* Render Major City Station Anchors */}
+          {CITIES.map((city) => (
             <CircleMarker
               key={`city-${city.city}`}
               center={[city.lat, city.lng]}
               radius={9}
               pathOptions={{
-                color: "#1e293b",
+                color: "#0f172a",
                 fillColor: getColor(city.aqi),
-                fillOpacity: 0.9,
+                fillOpacity: 0.95,
                 weight: 2,
+              }}
+              eventHandlers={{
+                click: () => selectLocation(city),
               }}
             >
               <Popup>
                 <div className="space-y-1 text-xs">
-                  <h3 className="font-semibold text-sm">{city.city}</h3>
+                  <h3 className="font-semibold text-sm">{city.city}, {city.state}</h3>
                   <p>
-                    Station AQI: <strong>{city.aqi}</strong> ({getCategory(city.aqi)})
+                    Ground Station AQI: <strong style={{ color: getColor(city.aqi) }}>{city.aqi}</strong> ({city.category})
                   </p>
+                  <div className="border-t border-slate-200 pt-1 mt-1 text-slate-600">
+                    <div>PM2.5: {city.pm25} µg/m³</div>
+                    <div>PM10: {city.pm10} µg/m³</div>
+                    <div>NO₂: {city.no2} µg/m³ | CO: {city.co} mg/m³</div>
+                  </div>
                 </div>
               </Popup>
             </CircleMarker>

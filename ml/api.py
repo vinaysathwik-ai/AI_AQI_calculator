@@ -6,12 +6,10 @@ from pydantic import BaseModel
 import joblib
 import numpy as np
 
-# ─── Model paths ─────────────────────────────────────────────────────────────
-# Resolve models relative to this file so the API works regardless of cwd.
+# ─── Model & Data paths ───────────────────────────────────────────────────────
 _HERE = Path(__file__).parent
 _MODEL_DIR = _HERE.parent / "models"
-_GRID_JSON_PATH = _HERE / "grid_aqi.json"
-_GRID_JSON_PATH_FALLBACK = _HERE.parent / "datasets/processed/grid_aqi.json"
+_GRID_JSON_PATH = _HERE.parent / "datasets/processed/grid_aqi.json"
 
 _model = None
 _imputer = None
@@ -20,7 +18,7 @@ _grid_cache = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load models once at startup; release at shutdown."""
+    """Load models and canonical grid dataset once at startup."""
     global _model, _imputer, _grid_cache
     model_path = _MODEL_DIR / "aqi_model.pkl"
     imputer_path = _MODEL_DIR / "imputer.pkl"
@@ -34,11 +32,10 @@ async def lifespan(app: FastAPI):
     _model = joblib.load(model_path)
     _imputer = joblib.load(imputer_path)
 
-    # Load grid cache if available
-    grid_file = _GRID_JSON_PATH if _GRID_JSON_PATH.exists() else _GRID_JSON_PATH_FALLBACK
-    if grid_file.exists():
+    # Load canonical grid dataset if present
+    if _GRID_JSON_PATH.exists():
         try:
-            with open(grid_file, "r") as f:
+            with open(_GRID_JSON_PATH, "r") as f:
                 _grid_cache = json.load(f)
         except Exception:
             _grid_cache = []
@@ -90,14 +87,13 @@ def home():
 
 @app.get("/grid-aqi")
 def get_grid_aqi():
-    """Return precomputed all-India AQI grid points."""
+    """Return canonical precomputed all-India Satellite Pollution Index grid points."""
     global _grid_cache
-    if _grid_cache is not None:
+    if _grid_cache is not None and len(_grid_cache) > 0:
         return _grid_cache
     
-    grid_file = _GRID_JSON_PATH if _GRID_JSON_PATH.exists() else _GRID_JSON_PATH_FALLBACK
-    if grid_file.exists():
-        with open(grid_file, "r") as f:
+    if _GRID_JSON_PATH.exists():
+        with open(_GRID_JSON_PATH, "r") as f:
             _grid_cache = json.load(f)
             return _grid_cache
     

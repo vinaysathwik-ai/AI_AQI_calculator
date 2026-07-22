@@ -13,8 +13,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ml.api import app, _aqi_category  # noqa: E402
 
-# Use the context-manager form so the lifespan (model loading) fires.
-# The module-level `client` is replaced by a pytest fixture below.
 @pytest.fixture(scope="module")
 def client():
     """Fixture that starts the app lifespan and yields a TestClient."""
@@ -67,7 +65,6 @@ def test_validation_error_on_missing_fields(client):
 
 # ─── AQI category boundary tests (pure-function, no model needed) ─────────────
 @pytest.mark.parametrize("aqi,expected_category", [
-    # Boundary: exactly at the top of each band
     (0.0,   "Good"),
     (50.0,  "Good"),
     (50.01, "Satisfactory"),
@@ -80,7 +77,6 @@ def test_validation_error_on_missing_fields(client):
     (400.0, "Very Poor"),
     (400.01,"Severe"),
     (999.0, "Severe"),
-    # Mid-range sanity checks
     (25.0,  "Good"),
     (75.0,  "Satisfactory"),
     (150.0, "Moderate"),
@@ -89,13 +85,11 @@ def test_validation_error_on_missing_fields(client):
     (500.0, "Severe"),
 ])
 def test_aqi_category_boundaries(aqi, expected_category):
-    """Verify the AQI → category mapping at every band boundary."""
     assert _aqi_category(aqi) == expected_category
 
 
 # ─── Predicted category matches numeric AQI in response ──────────────────────
 def test_predict_category_matches_aqi(client):
-    """The category returned by /predict must match _aqi_category(predictedAQI)."""
     response = client.post("/predict", json=GOOD_PAYLOAD)
     assert response.status_code == 200
     data = response.json()
@@ -104,7 +98,6 @@ def test_predict_category_matches_aqi(client):
 
 # ─── Grid AQI endpoint ────────────────────────────────────────────────────────
 def test_grid_aqi_endpoint(client):
-    """GET /grid-aqi returns the precomputed grid array."""
     response = client.get("/grid-aqi")
     assert response.status_code == 200
     data = response.json()
@@ -113,6 +106,17 @@ def test_grid_aqi_endpoint(client):
     first_item = data[0]
     assert "lat" in first_item
     assert "lon" in first_item
+    assert "spi" in first_item
     assert "aqi" in first_item
-    assert "category" in first_item
 
+
+# ─── Point AQI endpoint ───────────────────────────────────────────────────────
+def test_point_aqi_endpoint(client):
+    response = client.get("/point-aqi?lat=28.61&lon=77.20")
+    assert response.status_code == 200
+    data = response.json()
+    assert "lat" in data
+    assert "lon" in data
+    assert "spi" in data
+    assert "aqi" in data
+    assert "distance_km" in data

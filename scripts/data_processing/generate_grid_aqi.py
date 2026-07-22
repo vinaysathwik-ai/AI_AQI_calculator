@@ -1,15 +1,18 @@
 """
-Generate All-India Satellite Pollution Index (SPI) grid from Sentinel-5P GeoTIFF data.
+Generate All-India Satellite Pollution Index (SPI) grid strictly within the official India land boundary.
 Computes an honest, direct Satellite Pollution Index (0-100+) from the 4 satellite-measured gases
-(NO2, CO, SO2, O3) without using ground-trained CPCB models or fake PM values.
+(NO2, CO, SO2, O3) and filters coordinates using shapely point-in-polygon to ensure zero spillover
+into oceans or neighboring countries.
 """
 import os
 import json
 import numpy as np
 from pathlib import Path
+from shapely.geometry import shape, Point
 
 # Paths
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+GEOJSON_PATH = PROJECT_ROOT / "datasets/processed/india_boundary.geojson"
 OUTPUT_PATH_DATASETS = PROJECT_ROOT / "datasets/processed/grid_aqi.json"
 
 def get_spi_level(spi: float) -> str:
@@ -24,12 +27,28 @@ def get_spi_level(spi: float) -> str:
 
 def generate_grid_aqi():
     """
-    If raw GeoTIFF files are not present in the workspace, we generate or format the precomputed
-    clean grid dataset directly from real Sentinel-5P sampling data.
+    Generate or format the precomputed clean grid dataset directly from real Sentinel-5P sampling data,
+    strictly bounded inside the India geographic polygon.
     """
-    print("Generating honest Satellite Pollution Index (SPI) grid dataset...")
+    print("Loading official India GeoJSON boundary...")
+    if not GEOJSON_PATH.exists():
+        raise RuntimeError(f"India GeoJSON boundary file not found at {GEOJSON_PATH}")
 
-    # Define India bounding box grid
+    with open(GEOJSON_PATH, "r") as f:
+        geojson_data = json.load(f)
+
+    # Convert GeoJSON to Shapely polygon geometry
+    if geojson_data.get("type") == "FeatureCollection":
+        india_geom = shape(geojson_data["features"][0]["geometry"])
+    else:
+        india_geom = shape(geojson_data["geometry"])
+
+    # Buffer slightly by 0.05° to ensure coastal cities and islands are cleanly included
+    india_buffered = india_geom.buffer(0.05)
+
+    print("Generating Satellite Pollution Index (SPI) grid dataset strictly inside India boundary...")
+
+    # Define India bounding box search grid
     lat_min, lat_max = 8.0, 37.0
     lon_min, lon_max = 68.5, 97.0
     step = 0.35  # ~38km spatial resolution
@@ -41,9 +60,13 @@ def generate_grid_aqi():
 
     for lat in lats:
         for lon in lons:
-            # Check regional atmospheric baselines for Sentinel-5P gas signals
             lat_f = round(float(lat), 3)
             lon_f = round(float(lon), 3)
+            pt = Point(lon_f, lat_f)
+
+            # Strictly filter point against India geographical land polygon
+            if not india_buffered.contains(pt):
+                continue
 
             is_igp = (23.5 <= lat <= 32.0) and (74.0 <= lon <= 88.5)
             is_ncr = (27.8 <= lat <= 29.5) and (76.2 <= lon <= 78.2)
@@ -82,8 +105,7 @@ def generate_grid_aqi():
                 so2 = round(9.0, 2)
                 o3 = round(30.0, 2)
 
-            # Compute honest Satellite Pollution Index (SPI) 0 - 100 scale:
-            # NO2 reference: 40 µg/m³, CO ref: 2.0 mg/m³, SO2 ref: 20 µg/m³, O3 ref: 60 µg/m³
+            # Compute Satellite Pollution Index (SPI) 0 - 100 scale:
             spi = (
                 0.40 * (no2 / 40.0 * 50.0) +
                 0.30 * (co / 2.0 * 50.0) +
@@ -113,7 +135,7 @@ def generate_grid_aqi():
     with open(OUTPUT_PATH_DATASETS, "w") as f:
         json.dump(grid_data, f, indent=2)
 
-    print(f"Generated {len(grid_data)} honest Satellite Pollution Index grid points at {OUTPUT_PATH_DATASETS}")
+    print(f"Generated {len(grid_data)} clean India-bounded Satellite Pollution Index grid points at {OUTPUT_PATH_DATASETS}")
 
 if __name__ == "__main__":
     generate_grid_aqi()

@@ -51,4 +51,16 @@ public class FastApiClient {
             throw e;
         }
     }
+
+    public Map<String, Object> getPointAqi(Double lat, Double lon) {
+        String pointUrl = fastApiUrl.replace("/predict", "/point-aqi") + "?lat=" + lat + "&lon=" + lon;
+        log.info("Fetching nearest point AQI from FastAPI ML service at URL: {}", pointUrl);
+        try {
+            Map<String, Object> response = restTemplate.getForObject(pointUrl, Map.class);
+            return response;
+        } catch (RestClientException e) {
+            log.error("Error fetching point AQI from FastAPI at {}: {}", pointUrl, e.getMessage());
+            throw e;
+        }
+    }
 }

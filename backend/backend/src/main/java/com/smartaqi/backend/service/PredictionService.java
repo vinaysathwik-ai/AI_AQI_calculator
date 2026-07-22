@@ -65,4 +65,8 @@ public class PredictionService {
     public List<Map<String, Object>> getGridAqi() {
         return fastApiClient.getGridAqi();
     }
+
+    public Map<String, Object> getPointAqi(Double lat, Double lon) {
+        return fastApiClient.getPointAqi(lat, lon);
+    }
 }

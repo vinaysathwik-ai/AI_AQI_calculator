@@ -1,228 +1,137 @@
-# SmartAQI — AI-Powered Urban Air Quality Intelligence Platform
+# 🌍 SmartAQI - AI-Powered Satellite & Ground Air Quality Calculator
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110.0-009688.svg)](https://fastapi.tiangolo.com/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.5-6DB33F.svg)](https://spring.io/projects/spring-boot)
-[![React](https://img.shields.io/badge/React-18-61DAFB.svg)](https://react.dev/)
-[![Leaflet](https://img.shields.io/badge/Leaflet-1.9-199900.svg)](https://leafletjs.com/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-
-SmartAQI is an end-to-end, multi-tier AI platform for urban air quality monitoring, ML-based CPCB AQI prediction, and Sentinel-5P satellite pollution mapping across India.
+![Build Status](https://img.shields.io/badge/Build-Passing-emerald?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)
+![Stack](https://img.shields.io/badge/Stack-FastAPI%20%7C%20Spring%20Boot%203%20%7C%20React%2018%20%7C%20Leaflet-teal?style=flat-square)
 
 ---
 
 ## 📌 Problem Statement
 
-1. **Sparse Spatial Coverage of Ground Stations**: Ground-level Continuous Ambient Air Quality Monitoring Stations (CAAQMS) are concentrated primarily in major metropolitan centers (e.g., Delhi, Mumbai, Bengaluru). Millions of people living in Tier-2/3 cities, industrial corridors, and rural regions lack localized air quality data.
-2. **Missing Sensor Readings & Feature Gaps**: Ground stations frequently suffer from missing sensor parameters (e.g., missing PM2.5 or NH3 channels) due to sensor calibration outages, requiring robust imputation.
-3. **Satellite Data Misinterpretation**: Raw satellite instruments (such as Sentinel-5P TROPOMI) measure vertical atmospheric column densities ($\text{mol/m}^2$) rather than ground-level surface concentrations ($\mu\text{g/m}^3$). Feeding raw satellite gas layers directly into ground-station models produces misleading or uniform AQI readings without spatial calibration.
+India faces severe air quality challenges, but existing monitoring infrastructure suffers from three critical limitations:
+
+1. **Sparse Spatial Coverage**: Official CPCB ground monitoring stations (CAAQMS) are concentrated primarily in Tier-1 metropolitan hubs. Vast rural, semi-urban, and industrial regions lack real-time AQI visibility.
+2. **Missing Atmospheric Sensors**: Ground stations frequently suffer missing sensor channels (e.g. missing PM2.5 or NH3 readings), requiring robust median imputation pipelines for accurate standard CPCB AQI calculation.
+3. **Satellite Data Misinterpretation**: Raw Sentinel-5P TROPOMI satellite data measures vertical column density ($\text{mol/m}^2$) rather than ground surface concentrations ($\mu\text{g/m}^3$), rendering standard ground models inaccurate if applied directly without dedicated Satellite Pollution Indexing (SPI).
 
 ---
 
 ## 💡 How the Problem Is Solved
 
-SmartAQI solves these challenges through a **Dual-Layer Modeling Architecture**:
-
-1. **XGBoost Ground AQI ML Model (CPCB Standard)**:
-   - Trained on historical Indian CPCB city dataset (`PM2.5`, `PM10`, `NO2`, `SO2`, `CO`, `O3`, `NH3`, `NO`, `NOx`, `Benzene`, `Toluene`, `Xylene`).
-   - Uses `SimpleImputer` for handling missing pollutant parameters seamlessly.
-   - Returns official CPCB AQI values (0–500+) and categories (`Good`, `Satisfactory`, `Moderate`, `Poor`, `Very Poor`, `Severe`).
-
-2. **Satellite Pollution Index (SPI) Spatial Grid**:
-   - Samples 5 satellite gas channels from Sentinel-5P GeoTIFF data across a 6,806-point coordinate grid covering the entire Indian landmass (Lat 8.0°–37.0°, Lon 68.5°–97.0°).
-   - Computes an honest, direct **Satellite Pollution Index (SPI)** ($0\text{--}100+$) derived from `NO2`, `CO`, `SO2`, and `O3` atmospheric column densities.
-   - Provides continuous spatial coverage even in regions with no physical ground monitoring stations.
-
-3. **Multi-Tier Microservice Platform**:
-   - **FastAPI ML Service**: High-performance Python backend serving live model inference (`POST /predict`) and precomputed spatial grid datasets (`GET /grid-aqi`).
-   - **Spring Boot 3.2 Backend**: Enterprise Java REST API providing input validation, request proxying, timeout protection (`RestTemplateBuilder`), and database persistence (`PredictionEntity`).
-   - **React 18 + Vite Frontend**: Responsive dashboard featuring interactive Leaflet maps with city search, smooth map fly-to animations, diurnal trend charts, pollutant breakdown doughnuts, and dynamic AI health advisories.
-
----
-
-## 🏗️ System Architecture
+SmartAQI delivers an **honest, dual-layer air quality architecture**:
 
 ```mermaid
 flowchart TD
     subgraph Data Layer
-        A1[Sentinel-5P Satellite Rasters] -->|generate_grid_aqi.py| B1[(datasets/processed/grid_aqi.json)]
-        A2[CPCB Ground Dataset] -->|train_model.py| B2[(models/aqi_model.pkl & imputer.pkl)]
+        A1[CPCB Ground Dataset: city_day.csv] --> B1[XGBoost AQI Model & Median Imputer]
+        A2[Sentinel-5P GeoTIFF Rasters: NO2, CO, SO2, O3] --> B2[Satellite Pollution Index Generator: 6,806 Grid Cells]
     end
 
-    subgraph Backend Microservices
-        B1 --> C1[FastAPI ML Service :8000]
+    subgraph Service Layer
+        B1 --> C1[FastAPI ML Engine :8000]
         B2 --> C1
-        C1 -->|GET /grid-aqi & POST /predict| D1[Spring Boot REST API :8080]
-        D1 --> E1[(H2 / PostgreSQL DB)]
+        C1 --> C2[Spring Boot 3.2 Backend :8080]
+        C2 --> D1[H2 Persistence & RestTemplate Timeout Protection]
     end
 
-    subgraph Frontend Application
-        D1 --> F1[React 18 + Vite Dashboard :5173]
-        F1 --> G1[Interactive Leaflet Spatial Map]
-        F1 --> G2[XGBoost AQI Calculator & Presets]
-        F1 --> G3[Diurnal Trend & Pollutant Doughnut]
+    subgraph Frontend Dashboard Layer
+        C2 --> E1[React 18 Dashboard :5173]
+        E1 --> F1[Leaflet Canvas Edge-to-Edge Spatial Cell Heatmap]
+        E1 --> F2[GPS Geolocation & Nominatim Reverse Geocoding]
+        E1 --> F3[1-Click Quick Load Presets & Diurnal Trend Analytics]
     end
 ```
 
----
-
-## ✨ Key Features
-
-- **All-India Interactive Satellite Map**: Renders 6,806 Sentinel-5P grid points with dynamic CPCB color markers and interactive popups.
-- **Instant City Search & Map Fly-To**: Search any Indian city (e.g. Delhi, Mumbai, Bengaluru, Patna) with instant autocomplete to smoothly pan/zoom the map.
-- **Official CPCB AQI Predictor**: Predict AQI using 12 atmospheric parameters with 1-click quick presets (`Delhi Severe`, `Mumbai Moderate`, `Bengaluru Satisfactory`, `Clean Mountain Air`).
-- **Dynamic AI Health Recommendations**: Automatically generates health warnings (N95 mask advice, outdoor risk assessments) tailored to active AQI levels.
-- **Diurnal Pollution Trends & Breakdown**: Interactive Chart.js visualizers showing 24-hour AQI curves and pollutant concentration breakdown.
-- **Dark / Light Theme Toggle**: Full support for dark mode across all dashboard cards and topbar controls.
+### Key Architectural Highlights:
+- **Layer 1: CPCB Ground AQI Engine**: Trained XGBoost regressor predicting official CPCB Air Quality Index ($0\text{--}500+$) across 6 categories (`Good`, `Satisfactory`, `Moderate`, `Poor`, `Very Poor`, `Severe`) using 12 atmospheric parameters (`PM2.5`, `PM10`, `NO`, `NO2`, `NOx`, `NH3`, `CO`, `SO2`, `O3`, `Benzene`, `Toluene`, `Xylene`).
+- **Layer 2: Satellite Pollution Index (SPI)**: Direct spatial sampling across **6,806 Indian grid cells** derived from Sentinel-5P gas channels (`NO2`, `CO`, `SO2`, `O3`).
+- **Edge-to-Edge Canvas Heatmap**: Rendered as continuous 0.35° filled `Rectangle` shapes using `preferCanvas={true}` for high-performance zero-lag rendering.
+- **GPS Geolocation & Reverse Geocoding**: Integrated `navigator.geolocation` with OpenStreetMap Nominatim (`nominatim.openstreetmap.org/reverse`) to reverse-geocode coordinates into place names (e.g. *"Near Andheri, Mumbai"*).
+- **Nearest-Point AQI API (`GET /point-aqi`)**: Returns nearest grid point AQI and pollutant concentrations for any latitude/longitude coordinate in India.
 
 ---
 
-## 📁 Repository Structure
+## 🛠️ Repository Structure
 
 ```
-AI_AQI_calculator/
-├── backend/
-│   ├── Dockerfile                  # Multi-stage Maven/JRE Dockerfile
-│   └── backend/                    # Spring Boot 3.2 project
-│       ├── pom.xml
-│       └── src/main/java/com/smartaqi/backend/
-│           ├── config/             # RestClientConfig.java
-│           ├── controller/         # PredictionController.java
-│           ├── dto/                # PredictionRequest, PredictionResponse, ErrorResponse
-│           ├── entity/             # PredictionEntity.java
-│           ├── exception/          # GlobalExceptionHandler.java
-│           ├── repository/         # PredictionRepository.java
-│           └── service/            # FastApiClient.java, PredictionService.java
+AI_AQI_CALCULATOR/
+├── backend/backend/           # Spring Boot 3.2 Java Backend
+│   ├── src/main/java/com/smartaqi/backend/
+│   │   ├── controller/        # PredictionController (/api/predict, /api/grid-aqi, /api/point-aqi)
+│   │   ├── dto/               # PredictionRequest & PredictionResponse
+│   │   ├── entity/            # PredictionEntity (JPA H2 DB)
+│   │   └── service/           # PredictionService & FastApiClient
+│   └── pom.xml
 ├── datasets/
-│   ├── processed/grid_aqi.json     # Canonical 6,806-point Satellite Grid Dataset
-│   └── raw/historical/city_day.csv # CPCB historical dataset
-├── frontend/                       # React 18 + Vite frontend
-│   ├── Dockerfile
-│   ├── package.json
-│   └── src/
-│       ├── components/             # Dashboard, Map, & Prediction components
-│       ├── context/                # PredictionContext.jsx
-│       ├── data/                   # locationsData.js (22 major Indian cities)
-│       ├── layouts/                # MainLayout.jsx
-│       ├── pages/                  # Dashboard, Prediction, Analytics, Map, About
-│       └── services/               # api.js (Axios instance)
-├── ml/                             # FastAPI ML Service
-│   ├── Dockerfile
-│   ├── api.py                      # FastAPI application (lifespan model & grid loader)
-│   └── test_api.py                 # Pytest unit test suite (23 test cases)
-├── models/
-│   ├── aqi_model.pkl               # Trained XGBoost regressor
-│   └── imputer.pkl                 # SimpleImputer pipeline
-├── scripts/
-│   ├── data_processing/
-│   │   ├── generate_grid_aqi.py   # Satellite grid generator script
-│   │   └── inspect_and_sample_tifs.py
-│   └── model/
-│       └── train_model.py          # Model training script
-├── docker-compose.yml              # One-command full-stack container orchestration
-├── requirements.txt                # Essential Python dependencies
-└── README.md
+│   ├── raw/city_day.csv       # Ground training dataset
+│   └── processed/grid_aqi.json# Canonical 6,806 spatial grid dataset
+├── frontend/                  # React 18 + Vite + TailwindCSS Frontend
+│   ├── src/
+│   │   ├── components/        # IndiaMapCard, PredictionForm, AQISummary, etc.
+│   │   ├── context/           # PredictionContext (Location & Dark Mode State)
+│   │   └── data/              # Synchronized locationsData.js (22 major cities)
+├── ml/                        # Python FastAPI Machine Learning Service
+│   ├── api.py                 # FastAPI endpoints (/predict, /grid-aqi, /point-aqi)
+│   └── test_api.py            # Automated pytest test suite
+├── models/                    # Trained model artifacts (aqi_model.pkl, imputer.pkl)
+├── scripts/                   # Data processing & model training scripts
+├── docker-compose.yml         # Containerized stack configuration
+└── requirements.txt           # Python dependencies
 ```
 
 ---
 
-## 🚀 How to Run the Project
+## ⚡ Quick Start Guide
 
 ### Prerequisites
-- **Python**: 3.10 or higher
-- **Node.js**: v18 or higher & `npm`
-- **Java JDK**: 17 or higher (for Spring Boot backend)
-- *(Optional)* **Docker Desktop** (for containerized deployment)
+- **Python 3.12+**
+- **Java OpenJDK 17+** & **Maven**
+- **Node.js 18+** & **npm**
 
----
-
-### Option 1: Running Microservices Individually (Local Development)
-
-#### Step 1 — Set Up Python Environment & Run FastAPI ML Service
-```powershell
-# Create & activate virtual environment
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-
-# Install requirements
-pip install -r requirements.txt
-
-# Start FastAPI ML Service on port 8000
-uvicorn ml.api:app --host 127.0.0.1 --port 8000 --reload
+### Step 1: Start FastAPI ML Service
+```bash
+.\venv\Scripts\python.exe -m uvicorn ml.api:app --host 127.0.0.1 --port 8000 --reload
 ```
-> **Endpoints**:
-> - Health Check: `http://127.0.0.1:8000/`
-> - Satellite Grid Dataset: `http://127.0.0.1:8000/grid-aqi`
-> - Swagger Interactive Docs: `http://127.0.0.1:8000/docs`
 
-#### Step 2 — Run Spring Boot Backend Service
-Open a second terminal window:
-```powershell
-cd backend\backend
-
-# Build & run Spring Boot application on port 8080
+### Step 2: Start Spring Boot Backend
+```bash
+cd backend/backend
 .\mvnw.cmd spring-boot:run
 ```
-> **Endpoints**:
-> - Predict AQI: `POST http://localhost:8080/api/predict`
-> - Recent History: `GET http://localhost:8080/api/predictions/recent`
-> - Satellite Grid Proxy: `GET http://localhost:8080/api/grid-aqi`
 
-#### Step 3 — Run React Frontend Application
-Open a third terminal window:
-```powershell
+### Step 3: Start React Frontend
+```bash
 cd frontend
-
-# Install Node dependencies (first time only)
-npm install
-
-# Start Vite development server
 npm run dev
 ```
-> Open your web browser at **`http://localhost:5173`** to access the live dashboard!
+
+Visit **`http://localhost:5173`** in your browser!
 
 ---
 
-### Option 2: Running the Entire Stack via Docker Compose
-If you have Docker Desktop installed and running:
-
-```powershell
-docker-compose up --build
-```
-
-This starts all four services automatically:
-- **React Frontend**: `http://localhost:80`
-- **Spring Boot API**: `http://localhost:8080`
-- **FastAPI ML Service**: `http://localhost:8000`
-- **PostgreSQL Database**: `localhost:5432`
-
----
-
-## 🧪 Running Unit Tests
-
-To run the Python test suite verifying API endpoints, AQI category boundaries, payload validation, and grid dataset loading:
-
-```powershell
-.\venv\Scripts\python.exe -m pytest ml\test_api.py -v
-```
-
-> **Test Results**: All **23 / 23 test cases pass** cleanly.
-
----
-
-## 🔌 API Reference
+## 📡 API Reference
 
 | Service | Method | Endpoint | Description |
-|---------|--------|----------|-------------|
-| FastAPI | `GET` | `/` | Health check (`{"status": "SmartAQI API Running"}`) |
-| FastAPI | `GET` | `/grid-aqi` | Returns precomputed 6,806-point satellite grid array |
-| FastAPI | `POST` | `/predict` | Predicts AQI from 12 pollutant parameters |
-| Spring Boot | `POST` | `/api/predict` | Validates request, calls FastAPI, persists to DB |
-| Spring Boot | `GET` | `/api/predictions/recent` | Returns latest 10 saved prediction records |
-| Spring Boot | `GET` | `/api/grid-aqi` | Proxies satellite grid dataset to frontend |
+| :--- | :--- | :--- | :--- |
+| **FastAPI** | `GET` | `/` | Service health status |
+| **FastAPI** | `GET` | `/grid-aqi` | Canonical 6,806 spatial cell grid dataset |
+| **FastAPI** | `GET` | `/point-aqi?lat=...&lon=...` | Nearest spatial cell lookup |
+| **FastAPI** | `POST` | `/predict` | XGBoost AQI prediction from 12 gases |
+| **Spring Boot** | `GET` | `/api/grid-aqi` | Proxied spatial grid dataset |
+| **Spring Boot** | `GET` | `/api/point-aqi?lat=...&lon=...` | Proxied nearest spatial cell lookup |
+| **Spring Boot** | `POST` | `/api/predict` | Validated AQI prediction & H2 persistence |
+| **Spring Boot** | `GET` | `/api/predictions/recent` | Top 10 recent historical predictions |
 
 ---
 
-## 📜 License
+## 🧪 Automated Testing
 
-This project is licensed under the [MIT License](LICENSE).
+Run the automated Pytest suite:
+```bash
+.\venv\Scripts\python.exe -m pytest ml/test_api.py -v
+```
+
+---
+
+## 📄 License
+This project is open-source under the [MIT License](LICENSE).

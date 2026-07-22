@@ -33,4 +33,9 @@ public class PredictionController {
     public List<Map<String, Object>> getGridAqi() {
         return predictionService.getGridAqi();
     }
+
+    @GetMapping("/point-aqi")
+    public Map<String, Object> getPointAqi(@RequestParam Double lat, @RequestParam Double lon) {
+        return predictionService.getPointAqi(lat, lon);
+    }
 }

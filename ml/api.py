@@ -1,7 +1,8 @@
 import json
+import math
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 import joblib
 import numpy as np
@@ -79,6 +80,17 @@ def _aqi_category(aqi: float) -> str:
         return "Severe"
 
 
+def _ensure_grid_loaded():
+    global _grid_cache
+    if _grid_cache is not None and len(_grid_cache) > 0:
+        return _grid_cache
+    if _GRID_JSON_PATH.exists():
+        with open(_GRID_JSON_PATH, "r") as f:
+            _grid_cache = json.load(f)
+            return _grid_cache
+    return []
+
+
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 @app.get("/")
 def home():
@@ -88,16 +100,44 @@ def home():
 @app.get("/grid-aqi")
 def get_grid_aqi():
     """Return canonical precomputed all-India Satellite Pollution Index grid points."""
-    global _grid_cache
-    if _grid_cache is not None and len(_grid_cache) > 0:
-        return _grid_cache
-    
-    if _GRID_JSON_PATH.exists():
-        with open(_GRID_JSON_PATH, "r") as f:
-            _grid_cache = json.load(f)
-            return _grid_cache
-    
+    grid = _ensure_grid_loaded()
+    if grid:
+        return grid
     raise HTTPException(status_code=404, detail="Grid AQI dataset not generated yet")
+
+
+@app.get("/point-aqi")
+def get_point_aqi(
+    lat: float = Query(..., description="Latitude of coordinate"),
+    lon: float = Query(..., description="Longitude of coordinate"),
+):
+    """
+    Find nearest precomputed grid point for any (lat, lon) coordinate in India.
+    Calculates Euclidean distance to nearest grid cell in grid_aqi.json.
+    """
+    grid = _ensure_grid_loaded()
+    if not grid:
+        raise HTTPException(status_code=404, detail="Grid AQI dataset not generated yet")
+
+    best_pt = None
+    min_dist_sq = float("inf")
+
+    for pt in grid:
+        d_sq = (pt["lat"] - lat) ** 2 + (pt["lon"] - lon) ** 2
+        if d_sq < min_dist_sq:
+            min_dist_sq = d_sq
+            best_pt = pt
+
+    if best_pt is None:
+        raise HTTPException(status_code=404, detail="No grid point found")
+
+    dist_km = round(math.sqrt(min_dist_sq) * 111.0, 2)
+
+    result = dict(best_pt)
+    result["query_lat"] = lat
+    result["query_lon"] = lon
+    result["distance_km"] = dist_km
+    return result
 
 
 @app.post("/predict")
